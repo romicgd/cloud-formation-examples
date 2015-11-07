@@ -1,0 +1,162 @@
+{
+    "AWSTemplateFormatVersion": "2010-09-09",
+	  "Parameters" : {
+	    "BucketName" : {
+	      "Description" : "Name of the S3 bucket.",
+	      "Type" : "String"
+	    },
+	    "AppName" : {
+	      "Description" : "Name of the app.",
+	      "Type" : "String",
+	      "Default": ""
+	    },
+        "KeyName": {
+            "Description": "Name of an existing EC2 KeyPair to enable SSH access to the instances",
+            "Type": "String"
+        }
+    },
+        "Resources": {
+        "BasicInstanceProfile": {
+            "Properties": {
+                "Path": "/",
+                "Roles": [
+                    {
+                        "Ref": "BasicInstanceRole"
+                    }
+                ]
+            },
+            "Type": "AWS::IAM::InstanceProfile"
+        },
+        "BasicInstanceRole": {
+            "Properties": {
+                "AssumeRolePolicyDocument": {
+                    "Statement": [
+                        {
+                            "Action": [
+                                "sts:AssumeRole"
+                            ],
+                            "Effect": "Allow",
+                            "Principal": {
+                                "Service": [
+                                    "ec2.amazonaws.com"
+                                ]
+                            }
+                        }
+                    ],
+                    "Version": "2012-10-17"
+                },
+                "Path": "/"
+            },
+            "Type": "AWS::IAM::Role"
+        },
+        "RolePolicies": {
+            "Properties": {
+                "PolicyDocument": {
+                    "Statement": [
+                        {
+                            "Action": [
+                                "logs:CreateLogGroup",
+                                "logs:CreateLogStream",
+                                "logs:PutLogEvents",
+                                "logs:DescribeLogStreams"
+                            ],
+                            "Effect": "Allow",
+                            "Resource": [
+                                "arn:aws:logs:*:*:*"
+                            ]
+                        },
+                        {
+                            "Action": [
+                                "s3:GetObject"
+                            ],
+                            "Effect": "Allow",
+                            "Resource": [
+								{ "Fn::Join": [ "", [ "arn:aws:s3:::", { "Ref": "BucketName" }, "/*" ] ] }
+                            ]
+                        }
+                    ],
+                    "Version": "2012-10-17"
+                },
+                "PolicyName": "BasicInstacePolicy",
+                "Roles": [
+                    {
+                        "Ref": "BasicInstanceRole"
+                    }
+                ]
+            },
+            "Type": "AWS::IAM::Policy"
+        },
+        "sampleApplication": {
+            "Properties": {
+                "Description": "AWS Elastic Beanstalk App with logs"
+            },
+            "Type": "AWS::ElasticBeanstalk::Application"
+        },
+        "sampleApplicationVersion": {
+            "Properties": {
+                "ApplicationName": {
+                    "Ref": "sampleApplication"
+                },
+                "Description": "AWS ElasticBeanstalk Sample Application Version",
+                "SourceBundle": {
+                    "S3Bucket":  {"Ref" : "BucketName"},
+                    "S3Key": "php-sample.zip"
+                }
+            },
+            "Type": "AWS::ElasticBeanstalk::ApplicationVersion"
+        },
+        "sampleConfigurationTemplate": {
+            "Properties": {
+                "ApplicationName": {
+                    "Ref": "sampleApplication"
+                },
+                "Description": "AWS ElasticBeanstalk Sample Configuration Template",
+                "OptionSettings": [
+                    {
+                        "Namespace": "aws:autoscaling:asg",
+                        "OptionName": "MinSize",
+                        "Value": "1"
+                    },
+                    {
+                        "Namespace": "aws:autoscaling:asg",
+                        "OptionName": "MaxSize",
+                        "Value": "1"
+                    },
+                    {
+                        "Namespace": "aws:autoscaling:launchconfiguration",
+                        "OptionName": "IamInstanceProfile",
+                        "Value": { "Ref": "BasicInstanceProfile" }
+                    },
+                    {
+                        "Namespace": "aws:autoscaling:launchconfiguration",
+                        "OptionName": "EC2KeyName",
+                        "Value": { "Ref": "KeyName" }
+                    },
+                    {
+                        "Namespace": "aws:elasticbeanstalk:environment",
+                        "OptionName": "EnvironmentType",
+                        "Value": "LoadBalanced"
+                    }
+                ],
+                "SolutionStackName": "64bit Amazon Linux running PHP 5.3"
+            },
+            "Type": "AWS::ElasticBeanstalk::ConfigurationTemplate",
+            "DependsOn" : "BasicInstanceProfile"
+        },
+        "sampleEnvironment": {
+            "Properties": {
+                "ApplicationName": {
+                    "Ref": "sampleApplication"
+                },
+                "Description": "AWS ElasticBeanstalk Sample Environment",
+                "TemplateName": {
+                    "Ref": "sampleConfigurationTemplate"
+                },
+                "VersionLabel": {
+                    "Ref": "sampleApplicationVersion"
+                }
+            },
+            "Type": "AWS::ElasticBeanstalk::Environment"
+        }
+    }
+}
